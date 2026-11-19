@@ -1,0 +1,225 @@
+{
+  "entities": {
+    "CondominiumSettings": {
+      "title": "CondominiumSettings",
+      "description": "Configurações gerais e parâmetros contábeis do Condomínio José Cupertino Bicalho.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "cnpj": { "type": "string", "maxLength": 32 },
+        "address": { "type": "string", "maxLength": 200 },
+        "timezone": { "type": "string", "maxLength": 40 },
+        "currency": { "type": "string", "maxLength": 10 },
+        "initialBalance": { "type": "number" },
+        "initialBalanceDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "defaultDueDay": { "type": "number" },
+        "defaultConventionalFee": { "type": "number" },
+        "defaultPenthouseFee": { "type": "number" },
+        "rateioRule": { "type": "string", "maxLength": 240 },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["name", "timezone", "currency", "initialBalance", "initialBalanceDate", "defaultDueDay", "defaultConventionalFee", "defaultPenthouseFee", "updatedAt", "updatedBy"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Perfil autorizado de usuário vinculado a um papel de acesso e, quando morador, a uma unidade específica.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "minLength": 3, "maxLength": 180 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["admin", "conselheiro", "morador"] },
+        "unitId": { "type": "string", "maxLength": 64 },
+        "inviteId": { "type": "string", "maxLength": 128 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "active", "createdAt", "updatedAt"]
+    },
+    "UserInvite": {
+      "title": "UserInvite",
+      "description": "Convite pré-autorizado pelo síndico para ingresso de conselheiros, moradores ou novo síndico.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "minLength": 3, "maxLength": 180 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["admin", "conselheiro", "morador"] },
+        "unitId": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["pendente", "aceito", "revogado"] },
+        "acceptedUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["email", "displayName", "role", "status", "createdAt", "updatedAt", "createdBy"]
+    },
+    "Unit": {
+      "title": "Unit",
+      "description": "Unidade residencial do condomínio (apartamento convencional ou cobertura).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 64 },
+        "code": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "type": { "type": "string", "enum": ["convencional", "cobertura"] },
+        "ownerName": { "type": "string", "maxLength": 120 },
+        "contact": { "type": "string", "maxLength": 120 },
+        "occupancyStatus": { "type": "string", "enum": ["ocupado_proprietario", "alugado", "desocupado"] },
+        "monthlyFee": { "type": "number" },
+        "allocationRule": { "type": "string", "maxLength": 180 },
+        "active": { "type": "boolean" },
+        "order": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "code", "displayName", "type", "ownerName", "occupancyStatus", "monthlyFee", "allocationRule", "active", "order", "updatedAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Lançamento financeiro de receita ou despesa com competência, vencimento, liquidação e situação.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "description": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "expenseGroup": { "type": "string", "enum": ["custos_fixos", "manutencao_servicos"] },
+        "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "competence": { "type": "string", "pattern": "^\\d{4}-\\d{2}$" },
+        "dueDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "settlementDate": { "type": "string", "maxLength": 10 },
+        "expectedAmount": { "type": "number" },
+        "settledAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pendente", "parcial", "recebido", "pago", "agendado", "debito_automatico", "adiado", "cancelado"] },
+        "unitId": { "type": "string", "maxLength": 64 },
+        "unitLabel": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "installmentLabel": { "type": "string", "maxLength": 40 },
+        "receiptId": { "type": "string", "maxLength": 128 },
+        "receiptUrl": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "type", "description", "category", "competence", "dueDate", "expectedAmount", "settledAmount", "status", "notes", "createdAt", "updatedAt", "createdBy"]
+    },
+    "MonthlyReport": {
+      "title": "MonthlyReport",
+      "description": "Prestação de contas mensal fechada e publicada para transparência dos moradores.",
+      "type": "object",
+      "properties": {
+        "competence": { "type": "string", "pattern": "^\\d{4}-\\d{2}$" },
+        "label": { "type": "string", "minLength": 3, "maxLength": 40 },
+        "published": { "type": "boolean" },
+        "previousBalance": { "type": "number" },
+        "totalIncome": { "type": "number" },
+        "totalFixedExpenses": { "type": "number" },
+        "totalMaintenanceExpenses": { "type": "number" },
+        "totalExpenses": { "type": "number" },
+        "monthResult": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "incomeItems": { "type": "array" },
+        "fixedExpenseItems": { "type": "array" },
+        "maintenanceExpenseItems": { "type": "array" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "publishedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "publishedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["competence", "label", "published", "previousBalance", "totalIncome", "totalFixedExpenses", "totalMaintenanceExpenses", "totalExpenses", "monthResult", "currentBalance", "incomeItems", "fixedExpenseItems", "maintenanceExpenseItems", "updatedAt"]
+    },
+    "UnitStatement": {
+      "title": "UnitStatement",
+      "description": "Extrato consolidado da própria unidade para consulta isolada do morador.",
+      "type": "object",
+      "properties": {
+        "unitId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 64 },
+        "unitCode": { "type": "string", "maxLength": 60 },
+        "entries": { "type": "array" },
+        "totalPending": { "type": "number" },
+        "totalPaid": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["unitId", "unitCode", "entries", "totalPending", "totalPaid", "updatedAt"]
+    },
+    "Receipt": {
+      "title": "Receipt",
+      "description": "Comprovante de pagamento ou documento fiscal anexado a um lançamento.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "txId": { "type": "string", "maxLength": 128 },
+        "unitId": { "type": "string", "maxLength": 64 },
+        "competence": { "type": "string", "pattern": "^\\d{4}-\\d{2}$" },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "mimeType": { "type": "string", "minLength": 3, "maxLength": 80 },
+        "dataUrl": { "type": "string", "maxLength": 750000 },
+        "visibility": { "type": "string", "enum": ["council_and_admin", "published_residents"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "txId", "competence", "fileName", "mimeType", "dataUrl", "visibility", "createdAt", "createdBy"]
+    },
+    "MonthlyDocument": {
+      "title": "MonthlyDocument",
+      "description": "Documento mensal de prestação de contas e auditoria (extrato bancário, comprovante, boleto, nota fiscal, contrato, recibo ou vistoria).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "competence": { "type": "string", "pattern": "^\\d{4}-\\d{2}$" },
+        "documentDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "category": { "type": "string", "enum": ["extrato_bancario", "comprovante_pagamento", "boleto_guia", "nota_fiscal", "contrato", "recibo", "encargos_fiscais", "vistoria_midia"] },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "mimeType": { "type": "string", "minLength": 3, "maxLength": 80 },
+        "storageMode": { "type": "string", "enum": ["embedded", "external_link"] },
+        "dataUrl": { "type": "string", "maxLength": 750000 },
+        "externalUrl": { "type": "string", "maxLength": 500, "pattern": "^https://.*" },
+        "visibility": { "type": "string", "enum": ["council_and_admin", "published_residents"] },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "competence", "title", "category", "fileName", "mimeType", "storageMode", "visibility", "notes", "createdAt", "updatedAt", "createdBy"]
+    }
+  },
+  "firestore": {
+    "/condominium/{docId}": {
+      "schema": { "$ref": "#/entities/CondominiumSettings" },
+      "description": "Configurações financeiras e regras de rateio do condomínio."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Perfis de acesso (Síndico, Conselheiro, Morador) vinculados ao UID do Firebase Auth."
+    },
+    "/invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/UserInvite" },
+      "description": "Convites nominais gerenciados pelo Síndico para autorização de acesso."
+    },
+    "/units/{unitId}": {
+      "schema": { "$ref": "#/entities/Unit" },
+      "description": "Cadastro das 6 unidades residenciais do condomínio."
+    },
+    "/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Lançamentos financeiros de receitas e despesas."
+    },
+    "/monthly_reports/{competence}": {
+      "schema": { "$ref": "#/entities/MonthlyReport" },
+      "description": "Prestações de contas mensais consolidadas e status de publicação."
+    },
+    "/unit_statements/{unitId}": {
+      "schema": { "$ref": "#/entities/UnitStatement" },
+      "description": "Extrato financeiro individual de cada unidade, acessível apenas ao Síndico, Conselheiro e ao morador da própria unidade."
+    },
+    "/receipts/{receiptId}": {
+      "schema": { "$ref": "#/entities/Receipt" },
+      "description": "Comprovantes anexados aos lançamentos financeiros com visibilidade controlada."
+    },
+    "/monthly_documents/{docId}": {
+      "schema": { "$ref": "#/entities/MonthlyDocument" },
+      "description": "Pasta mensal de auditoria com extratos, comprovantes, boletos, notas fiscais, contratos e recibos."
+    }
+  }
+}

@@ -1,0 +1,480 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Safety net global: nega tudo por padrão
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ==================== Primitivas Globais ====================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function authEmailLower() {
+      return request.auth.token.email.lower();
+    }
+
+    function isBootstrappedAdmin() {
+      return isEmailVerified() &&
+        authEmailLower() == 'condominiojosecupertinobicalho@gmail.com';
+    }
+
+    function userDocExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAuthorizedMember() {
+      return isBootstrappedAdmin() || (
+        isEmailVerified() &&
+        userDocExists() &&
+        userDoc().active == true
+      );
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isEmailVerified() &&
+        userDocExists() &&
+        userDoc().active == true &&
+        userDoc().role == 'admin'
+      );
+    }
+
+    function isCouncil() {
+      return isEmailVerified() &&
+        userDocExists() &&
+        userDoc().active == true &&
+        userDoc().role == 'conselheiro';
+    }
+
+    function isAdminOrCouncil() {
+      return isAdmin() || isCouncil();
+    }
+
+    function userUnitId() {
+      return userDocExists() ? userDoc().unitId : null;
+    }
+
+    // ==================== Blueprints de Validação ====================
+    function isValidCondominiumSettings(data) {
+      return data.keys().hasAll([
+        'name', 'timezone', 'currency', 'initialBalance', 'initialBalanceDate',
+        'defaultDueDay', 'defaultConventionalFee', 'defaultPenthouseFee', 'updatedAt', 'updatedBy'
+      ]) &&
+      data.keys().hasOnly([
+        'name', 'cnpj', 'address', 'timezone', 'currency', 'initialBalance', 'initialBalanceDate',
+        'defaultDueDay', 'defaultConventionalFee', 'defaultPenthouseFee', 'rateioRule', 'updatedAt', 'updatedBy'
+      ]) &&
+      data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+      (!('cnpj' in data) || (data.cnpj is string && data.cnpj.size() <= 32)) &&
+      (!('address' in data) || (data.address is string && data.address.size() <= 200)) &&
+      data.timezone is string && data.timezone.size() <= 40 &&
+      data.currency is string && data.currency.size() <= 10 &&
+      data.initialBalance is number &&
+      data.initialBalanceDate is string && data.initialBalanceDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+      data.defaultDueDay is number && data.defaultDueDay >= 1 && data.defaultDueDay <= 28 &&
+      data.defaultConventionalFee is number && data.defaultConventionalFee >= 0 &&
+      data.defaultPenthouseFee is number && data.defaultPenthouseFee >= 0 &&
+      (!('rateioRule' in data) || (data.rateioRule is string && data.rateioRule.size() <= 240)) &&
+      data.updatedAt is timestamp &&
+      data.updatedBy is string && data.updatedBy.size() <= 128;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'unitId', 'active', 'createdAt', 'updatedAt']) &&
+      data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'unitId', 'inviteId', 'active', 'createdAt', 'updatedAt']) &&
+      data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 180 &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
+      data.role in ['admin', 'conselheiro', 'morador'] &&
+      (data.unitId == null || (data.unitId is string && data.unitId.size() <= 64)) &&
+      (!('inviteId' in data) || data.inviteId == null || (data.inviteId is string && data.inviteId.size() <= 128)) &&
+      data.active is bool &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidInvite(data) {
+      return data.keys().hasAll(['email', 'displayName', 'role', 'unitId', 'status', 'createdAt', 'updatedAt', 'createdBy']) &&
+      data.keys().hasOnly(['email', 'displayName', 'role', 'unitId', 'status', 'acceptedUid', 'createdAt', 'updatedAt', 'createdBy']) &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 180 &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
+      data.role in ['admin', 'conselheiro', 'morador'] &&
+      (data.unitId == null || (data.unitId is string && data.unitId.size() <= 64)) &&
+      data.status in ['pendente', 'aceito', 'revogado'] &&
+      (!('acceptedUid' in data) || data.acceptedUid == null || (data.acceptedUid is string && data.acceptedUid.size() <= 128)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp &&
+      data.createdBy is string && data.createdBy.size() <= 128;
+    }
+
+    function isValidUnit(data) {
+      return data.keys().hasAll([
+        'id', 'code', 'displayName', 'type', 'ownerName', 'occupancyStatus',
+        'monthlyFee', 'allocationRule', 'active', 'order', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'code', 'displayName', 'type', 'ownerName', 'contact',
+        'occupancyStatus', 'monthlyFee', 'allocationRule', 'active', 'order', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      data.code is string && data.code.size() >= 1 && data.code.size() <= 60 &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+      data.type in ['convencional', 'cobertura'] &&
+      data.ownerName is string && data.ownerName.size() <= 120 &&
+      (!('contact' in data) || (data.contact is string && data.contact.size() <= 120)) &&
+      data.occupancyStatus in ['ocupado_proprietario', 'alugado', 'desocupado'] &&
+      data.monthlyFee is number && data.monthlyFee >= 0 &&
+      data.allocationRule is string && data.allocationRule.size() <= 180 &&
+      data.active is bool &&
+      data.order is number && data.order >= 0 &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll([
+        'id', 'type', 'description', 'category', 'competence', 'dueDate',
+        'expectedAmount', 'settledAmount', 'status', 'notes', 'createdAt', 'updatedAt', 'createdBy'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'type', 'description', 'expenseGroup', 'category', 'competence', 'dueDate',
+        'settlementDate', 'expectedAmount', 'settledAmount', 'status', 'unitId', 'unitLabel',
+        'notes', 'installmentLabel', 'receiptId', 'receiptUrl', 'createdAt', 'updatedAt', 'createdBy'
+      ]) &&
+      isValidId(data.id) &&
+      data.type in ['income', 'expense'] &&
+      data.description is string && data.description.size() >= 1 && data.description.size() <= 180 &&
+      (!('expenseGroup' in data) || data.expenseGroup == null || data.expenseGroup in ['custos_fixos', 'manutencao_servicos']) &&
+      data.category is string && data.category.size() >= 1 && data.category.size() <= 80 &&
+      data.competence is string && data.competence.matches('^\\d{4}-\\d{2}$') &&
+      data.dueDate is string && data.dueDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+      (!('settlementDate' in data) || data.settlementDate == null || (data.settlementDate is string && data.settlementDate.size() <= 10)) &&
+      data.expectedAmount is number && data.expectedAmount >= 0 &&
+      data.settledAmount is number && data.settledAmount >= 0 &&
+      data.status in ['pendente', 'parcial', 'recebido', 'pago', 'agendado', 'debito_automatico', 'adiado', 'cancelado'] &&
+      (!('unitId' in data) || data.unitId == null || (data.unitId is string && data.unitId.size() <= 64)) &&
+      (!('unitLabel' in data) || data.unitLabel == null || (data.unitLabel is string && data.unitLabel.size() <= 64)) &&
+      data.notes is string && data.notes.size() <= 500 &&
+      (!('installmentLabel' in data) || data.installmentLabel == null || (data.installmentLabel is string && data.installmentLabel.size() <= 40)) &&
+      (!('receiptId' in data) || data.receiptId == null || (data.receiptId is string && data.receiptId.size() <= 128)) &&
+      (!('receiptUrl' in data) || data.receiptUrl == null || (data.receiptUrl is string && data.receiptUrl.size() <= 500)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp &&
+      data.createdBy is string && data.createdBy.size() <= 128;
+    }
+
+    function isValidMonthlyReport(data) {
+      return data.keys().hasAll([
+        'competence', 'label', 'published', 'previousBalance', 'totalIncome',
+        'totalFixedExpenses', 'totalMaintenanceExpenses', 'totalExpenses',
+        'monthResult', 'currentBalance', 'incomeItems', 'fixedExpenseItems',
+        'maintenanceExpenseItems', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'competence', 'label', 'published', 'previousBalance', 'totalIncome',
+        'totalFixedExpenses', 'totalMaintenanceExpenses', 'totalExpenses',
+        'monthResult', 'currentBalance', 'incomeItems', 'fixedExpenseItems',
+        'maintenanceExpenseItems', 'notes', 'publishedAt', 'updatedAt', 'publishedBy'
+      ]) &&
+      data.competence is string && data.competence.matches('^\\d{4}-\\d{2}$') &&
+      data.label is string && data.label.size() >= 3 && data.label.size() <= 40 &&
+      data.published is bool &&
+      data.previousBalance is number &&
+      data.totalIncome is number &&
+      data.totalFixedExpenses is number &&
+      data.totalMaintenanceExpenses is number &&
+      data.totalExpenses is number &&
+      data.monthResult is number &&
+      data.currentBalance is number &&
+      data.incomeItems is list && data.incomeItems.size() <= 100 &&
+      data.fixedExpenseItems is list && data.fixedExpenseItems.size() <= 100 &&
+      data.maintenanceExpenseItems is list && data.maintenanceExpenseItems.size() <= 100 &&
+      (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+      (!('publishedAt' in data) || data.publishedAt == null || data.publishedAt is timestamp) &&
+      data.updatedAt is timestamp &&
+      (!('publishedBy' in data) || data.publishedBy == null || (data.publishedBy is string && data.publishedBy.size() <= 128));
+    }
+
+    function isValidUnitStatement(data) {
+      return data.keys().hasAll(['unitId', 'unitCode', 'entries', 'totalPending', 'totalPaid', 'updatedAt']) &&
+      data.keys().hasOnly(['unitId', 'unitCode', 'entries', 'totalPending', 'totalPaid', 'updatedAt']) &&
+      isValidId(data.unitId) &&
+      data.unitCode is string && data.unitCode.size() >= 1 && data.unitCode.size() <= 60 &&
+      data.entries is list && data.entries.size() <= 500 &&
+      data.totalPending is number &&
+      data.totalPaid is number &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidReceipt(data) {
+      return data.keys().hasAll(['id', 'txId', 'competence', 'fileName', 'mimeType', 'dataUrl', 'visibility', 'createdAt', 'createdBy']) &&
+      data.keys().hasOnly(['id', 'txId', 'unitId', 'competence', 'fileName', 'mimeType', 'dataUrl', 'visibility', 'createdAt', 'createdBy']) &&
+      isValidId(data.id) &&
+      data.txId is string && data.txId.size() >= 1 && data.txId.size() <= 128 &&
+      (!('unitId' in data) || data.unitId == null || (data.unitId is string && data.unitId.size() <= 64)) &&
+      data.competence is string && data.competence.matches('^\\d{4}-\\d{2}$') &&
+      data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 180 &&
+      data.mimeType is string && data.mimeType.size() >= 3 && data.mimeType.size() <= 80 &&
+      data.dataUrl is string && data.dataUrl.size() >= 1 && data.dataUrl.size() <= 750000 &&
+      data.visibility in ['council_and_admin', 'published_residents'] &&
+      data.createdAt is timestamp &&
+      data.createdBy is string && data.createdBy.size() <= 128;
+    }
+
+    function isValidMonthlyDocument(data) {
+      return data.keys().hasAll([
+        'id', 'competence', 'title', 'category', 'fileName', 'mimeType',
+        'storageMode', 'visibility', 'notes', 'createdAt', 'updatedAt', 'createdBy'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'competence', 'documentDate', 'title', 'category', 'fileName', 'mimeType',
+        'storageMode', 'dataUrl', 'externalUrl', 'visibility', 'notes', 'createdAt', 'updatedAt', 'createdBy'
+      ]) &&
+      isValidId(data.id) &&
+      data.competence is string && data.competence.matches('^\\d{4}-\\d{2}$') &&
+      (!('documentDate' in data) || data.documentDate == null || (data.documentDate is string && data.documentDate.matches('^\\d{4}-\\d{2}-\\d{2}$'))) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 180 &&
+      data.category in [
+        'extrato_bancario', 'comprovante_pagamento', 'boleto_guia',
+        'nota_fiscal', 'contrato', 'recibo', 'encargos_fiscais', 'vistoria_midia'
+      ] &&
+      data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 180 &&
+      data.mimeType is string && data.mimeType.size() >= 3 && data.mimeType.size() <= 80 &&
+      data.storageMode in ['embedded', 'external_link'] &&
+      (!('dataUrl' in data) || data.dataUrl == null || (data.dataUrl is string && data.dataUrl.size() >= 1 && data.dataUrl.size() <= 750000)) &&
+      (!('externalUrl' in data) || data.externalUrl == null || (data.externalUrl is string && data.externalUrl.size() >= 1 && data.externalUrl.size() <= 500 && data.externalUrl.matches('^https://.*'))) &&
+      (
+        (data.storageMode == 'embedded' && 'dataUrl' in data && data.dataUrl is string && data.dataUrl.size() >= 1) ||
+        (data.storageMode == 'external_link' && 'externalUrl' in data && data.externalUrl is string && data.externalUrl.size() >= 1)
+      ) &&
+      data.visibility in ['council_and_admin', 'published_residents'] &&
+      data.notes is string && data.notes.size() <= 500 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp &&
+      data.createdBy is string && data.createdBy.size() <= 128;
+    }
+
+    // ==================== Regras por Coleção ====================
+
+    match /condominium/{docId} {
+      allow get: if isValidId(docId) && isAuthorizedMember();
+      allow list: if false;
+      allow create, update: if isAdmin() &&
+        isValidId(docId) &&
+        isValidCondominiumSettings(incoming()) &&
+        incoming().updatedAt == request.time &&
+        incoming().updatedBy == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isEmailVerified() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isEmailVerified() && isValidId(userId) && isValidUserProfile(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time && (
+          (
+            isBootstrappedAdmin() &&
+            userId == request.auth.uid &&
+            incoming().uid == request.auth.uid &&
+            incoming().email.lower() == authEmailLower() &&
+            incoming().role == 'admin' &&
+            incoming().active == true
+          ) ||
+          (
+            isAdmin() &&
+            incoming().uid == userId
+          ) ||
+          (
+            userId == request.auth.uid &&
+            incoming().uid == request.auth.uid &&
+            incoming().email.lower() == authEmailLower() &&
+            incoming().active == true &&
+            ('inviteId' in incoming()) &&
+            incoming().inviteId is string &&
+            isValidId(incoming().inviteId) &&
+            exists(/databases/$(database)/documents/invites/$(incoming().inviteId)) &&
+            get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.email.lower() == authEmailLower() &&
+            get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.status == 'pendente' &&
+            incoming().role == get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.role &&
+            incoming().unitId == get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.unitId &&
+            getAfter(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.status == 'aceito'
+          )
+        );
+      allow update: if isAdmin() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'role', 'unitId', 'active', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
+    }
+
+    match /invites/{inviteId} {
+      allow get: if isEmailVerified() && isValidId(inviteId) && (
+        isAdmin() ||
+        (resource != null && resource.data.email.lower() == authEmailLower())
+      );
+      allow list: if isAdmin();
+      allow create: if isAdmin() &&
+        isValidId(inviteId) &&
+        isValidInvite(incoming()) &&
+        incoming().status == 'pendente' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().createdBy == request.auth.uid;
+      allow update: if isEmailVerified() &&
+        isValidId(inviteId) &&
+        isValidInvite(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          (
+            existing().email.lower() == authEmailLower() &&
+            existing().status == 'pendente' &&
+            incoming().status == 'aceito' &&
+            incoming().acceptedUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'acceptedUid', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(inviteId);
+    }
+
+    match /units/{unitId} {
+      allow get: if isValidId(unitId) && (
+        isAdminOrCouncil() ||
+        (isAuthorizedMember() && userUnitId() == unitId)
+      );
+      allow list: if isAdminOrCouncil();
+      allow create, update: if isAdmin() &&
+        isValidId(unitId) &&
+        isValidUnit(incoming()) &&
+        incoming().id == unitId &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(unitId);
+    }
+
+    match /transactions/{txId} {
+      allow get: if isValidId(txId) && isAdminOrCouncil();
+      allow list: if isAdminOrCouncil();
+      allow create: if isAdmin() &&
+        isValidId(txId) &&
+        isValidTransaction(incoming()) &&
+        incoming().id == txId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().createdBy == request.auth.uid;
+      allow update: if isAdmin() &&
+        isValidId(txId) &&
+        isValidTransaction(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(txId);
+    }
+
+    match /monthly_reports/{competence} {
+      allow get: if isValidId(competence) && (
+        isAdminOrCouncil() ||
+        (isAuthorizedMember() && resource != null && resource.data.published == true)
+      );
+      allow list: if isAdminOrCouncil() || (isAuthorizedMember() && resource.data.published == true);
+      allow create, update: if isAdmin() &&
+        isValidId(competence) &&
+        isValidMonthlyReport(incoming()) &&
+        incoming().competence == competence &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(competence);
+    }
+
+    match /unit_statements/{unitId} {
+      allow get: if isValidId(unitId) && (
+        isAdminOrCouncil() ||
+        (isAuthorizedMember() && userUnitId() == unitId)
+      );
+      allow list: if isAdminOrCouncil();
+      allow create, update: if isAdmin() &&
+        isValidId(unitId) &&
+        isValidUnitStatement(incoming()) &&
+        incoming().unitId == unitId &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(unitId);
+    }
+
+    match /receipts/{receiptId} {
+      allow get: if isValidId(receiptId) && (
+        isAdminOrCouncil() ||
+        (
+          isAuthorizedMember() &&
+          resource != null &&
+          resource.data.visibility == 'published_residents' &&
+          (resource.data.unitId == null || resource.data.unitId == userUnitId())
+        )
+      );
+      allow list: if isAdminOrCouncil();
+      allow create: if isAdmin() &&
+        isValidId(receiptId) &&
+        isValidReceipt(incoming()) &&
+        incoming().id == receiptId &&
+        incoming().createdAt == request.time &&
+        incoming().createdBy == request.auth.uid;
+      allow update: if isAdmin() &&
+        isValidId(receiptId) &&
+        isValidReceipt(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().createdBy == existing().createdBy;
+      allow delete: if isAdmin() && isValidId(receiptId);
+    }
+
+    match /monthly_documents/{docId} {
+      allow get: if isValidId(docId) && (
+        isAdminOrCouncil() ||
+        (isAuthorizedMember() && resource != null && resource.data.visibility == 'published_residents')
+      );
+      allow list: if isAdminOrCouncil() ||
+        (isAuthorizedMember() && resource.data.visibility == 'published_residents');
+      allow create: if isAdmin() &&
+        isValidId(docId) &&
+        isValidMonthlyDocument(incoming()) &&
+        incoming().id == docId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().createdBy == request.auth.uid;
+      allow update: if isAdmin() &&
+        isValidId(docId) &&
+        isValidMonthlyDocument(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(docId);
+    }
+  }
+}
